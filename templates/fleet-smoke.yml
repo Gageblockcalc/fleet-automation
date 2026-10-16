@@ -1,0 +1,10 @@
+# Added by the hub automation. CI only — does not change app code.
+name: fleet-smoke
+on:
+  schedule: [{ cron: '__CRON__' }]
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  smoke:
+    uses: Gageblockcalc/fleet-automation/.github/workflows/smoke.yml@main
+    with: { url: '__URL__' }

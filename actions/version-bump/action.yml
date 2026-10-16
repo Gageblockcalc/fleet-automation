@@ -1,0 +1,23 @@
+name: version-bump
+description: Writes VERSION as <base>.<build>+<shortsha>.<date> (build = GitHub run number). Exposes `version` output. Does not commit.
+inputs:
+  base: { description: 'major.minor (default: from package.json or 1.0)', required: false, default: '' }
+  file: { description: 'file to write the version string to', required: false, default: version.txt }
+  replace-in: { description: 'optional space-separated files where __APP_VERSION__ is replaced', required: false, default: '' }
+outputs:
+  version: { description: full version, value: '${{ steps.v.outputs.version }}' }
+runs:
+  using: composite
+  steps:
+    - id: v
+      shell: bash
+      env: { BASE: '${{ inputs.base }}', FILE: '${{ inputs.file }}', REPL: '${{ inputs.replace-in }}' }
+      run: |
+        base="$BASE"
+        if [ -z "$base" ] && [ -f package.json ]; then base=$(node -p "(require('./package.json').version||'1.0.0').split('.').slice(0,2).join('.')" 2>/dev/null || echo 1.0); fi
+        base=${base:-1.0}
+        ver="${base}.${GITHUB_RUN_NUMBER}+${GITHUB_SHA::7}.$(date -u +%Y-%m-%d)"
+        printf '%s' "$ver" > "$FILE"
+        for f in $REPL; do [ -f "$f" ] && sed -i "s/__APP_VERSION__/${ver}/g" "$f"; done
+        echo "version=$ver" >> "$GITHUB_OUTPUT"
+        echo "Version: $ver" >> "$GITHUB_STEP_SUMMARY"

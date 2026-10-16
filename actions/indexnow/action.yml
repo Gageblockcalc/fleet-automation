@@ -1,0 +1,25 @@
+name: indexnow-ping
+description: >
+  Pings IndexNow (Bing, Yandex, Seznam, Naver) with URLs from a sitemap. Google's sitemap ping is deprecated, so
+  Google relies on Search Console. The key file must be served at https://<host>/<key>.txt; generate it once with
+  scripts/indexnow-key.sh and commit it to the site's public root. The key is public by design (not a secret).
+inputs:
+  site: { description: 'https://host (no trailing slash)', required: true }
+  key: { description: 'IndexNow key (hex, 32 chars)', required: true }
+  sitemap: { description: 'sitemap URL (default <site>/sitemap.xml)', required: false, default: '' }
+  max: { description: 'max URLs per ping', required: false, default: '200' }
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env: { SITE: '${{ inputs.site }}', KEY: '${{ inputs.key }}', SM: '${{ inputs.sitemap }}', MAX: '${{ inputs.max }}' }
+      run: |
+        set -euo pipefail
+        SM=${SM:-$SITE/sitemap.xml}; HOST=${SITE#https://}; HOST=${HOST%/}
+        code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE/$KEY.txt"); [ "$code" = 200 ] || { echo "::error::key file $SITE/$KEY.txt not reachable ($code)"; exit 1; }
+        urls=$(curl -fsSL "$SM" | grep -oE '<loc>[^<]+</loc>' | sed -E 's#</?loc>##g' | head -n "$MAX")
+        [ -n "$urls" ] || { echo "::warning::no URLs in $SM"; exit 0; }
+        body=$(python3 -c 'import json,os,sys;u=sys.stdin.read().split();print(json.dumps({"host":os.environ["HOST"],"key":os.environ["KEY"],"keyLocation":os.environ["SITE"]+"/"+os.environ["KEY"]+".txt","urlList":u}))' <<< "$urls")
+        st=$(curl -s -o /dev/null -w '%{http_code}' -X POST https://api.indexnow.org/indexnow -H 'Content-Type: application/json; charset=utf-8' --data "$body")
+        echo "IndexNow $HOST: HTTP $st for $(wc -w <<< "$urls") URLs" | tee -a "$GITHUB_STEP_SUMMARY"
+        case "$st" in 200|202) ;; *) echo "::error::IndexNow returned $st"; exit 1;; esac
