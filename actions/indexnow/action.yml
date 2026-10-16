@@ -15,7 +15,7 @@ runs:
       env: { SITE: '${{ inputs.site }}', KEY: '${{ inputs.key }}', SM: '${{ inputs.sitemap }}', MAX: '${{ inputs.max }}' }
       run: |
         set -euo pipefail
-        SM=${SM:-$SITE/sitemap.xml}; HOST=${SITE#https://}; HOST=${HOST%/}
+        SM=${SM:-$SITE/sitemap.xml}; SITE=${SITE%/}; HOST=$(echo "$SITE" | sed -E "s#^https?://([^/]+).*#\1#"); export SITE HOST KEY
         code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE/$KEY.txt"); [ "$code" = 200 ] || { echo "::error::key file $SITE/$KEY.txt not reachable ($code)"; exit 1; }
         urls=$(curl -fsSL "$SM" | grep -oE '<loc>[^<]+</loc>' | sed -E 's#</?loc>##g' | head -n "$MAX")
         [ -n "$urls" ] || { echo "::warning::no URLs in $SM"; exit 0; }
